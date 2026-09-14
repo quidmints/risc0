@@ -42,14 +42,14 @@ pub trait SegmentProver {
     fn prove_core(&self, preflight_results: PreflightResults) -> Result<Seal>;
 }
 
-pub fn segment_prover() -> Result<Box<dyn SegmentProver>> {
+pub fn segment_prover(hashfn: &str) -> Result<Box<dyn SegmentProver>> {
     cfg_if! {
         if #[cfg(feature = "cuda")] {
-            self::hal::cuda::segment_prover()
+            self::hal::cuda::segment_prover(hashfn)
         // } else if #[cfg(any(all(target_os = "macos", target_arch = "aarch64"), target_os = "ios"))] {
         // self::hal::metal::segment_prover(hashfn)
         } else {
-            self::hal::cpu::segment_prover()
+            self::hal::cpu::segment_prover(hashfn)
         }
     }
 }

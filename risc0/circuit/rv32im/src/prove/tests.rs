@@ -35,7 +35,7 @@ fn run_program(program: Program) {
     let segments = result.segments;
     let segment = segments.first().unwrap();
 
-    let prover = segment_prover().unwrap();
+    let prover = segment_prover("poseidon2").unwrap();
     let seal = prover.prove(segment).unwrap();
     crate::verify(&seal).unwrap();
 }

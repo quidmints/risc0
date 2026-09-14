@@ -74,9 +74,9 @@ impl ProverServer for ProverImpl {
         );
 
         ensure!(
-            self.opts.hashfn == "poseidon2",
+            matches!(self.opts.hashfn.as_str(), "poseidon2" | "blake2b"),
             "provided `ProverOpts` has unsupported `hashfn` value of \"{}\"; \
-            supported `hashfn` values are: \"poseidon2\".",
+            supported `hashfn` values are: \"poseidon2\", \"blake2b\".",
             &self.opts.hashfn
         );
 
@@ -233,7 +233,7 @@ impl ProverServer for ProverImpl {
             segment.po2(),
             self.opts.max_segment_po2
         );
-        let inner = risc0_circuit_rv32im::prove::segment_prover()?.preflight(&segment.inner)?;
+        let inner = risc0_circuit_rv32im::prove::segment_prover(&self.opts.hashfn)?.preflight(&segment.inner)?;
 
         Ok(PreflightResults {
             inner,
@@ -251,15 +251,15 @@ impl ProverServer for ProverImpl {
         tracing::debug!("prove_segment_core");
 
         ensure!(
-            self.opts.hashfn == "poseidon2",
+            matches!(self.opts.hashfn.as_str(), "poseidon2" | "blake2b"),
             "provided `ProverOpts` has unsupported `hashfn` value of \"{}\"; \
-            supported `hashfn` values are: \"poseidon2\".",
+            supported `hashfn` values are: \"poseidon2\", \"blake2b\".",
             &self.opts.hashfn
         );
 
         let po2 = preflight_results.inner.po2();
         let seal =
-            risc0_circuit_rv32im::prove::segment_prover()?.prove_core(preflight_results.inner)?;
+            risc0_circuit_rv32im::prove::segment_prover(&self.opts.hashfn)?.prove_core(preflight_results.inner)?;
         let mut claim = ReceiptClaim::decode_from_seal_v2(&seal, Some(po2))?;
         claim.output = preflight_results.output.into();
 

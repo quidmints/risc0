@@ -230,7 +230,16 @@ impl<CH: CudaHash> CircuitHal<CudaHal<CH>> for CudaCircuitHal<CH> {
 
 pub type CudaCircuitHalPoseidon2 = CudaCircuitHal<CudaHashPoseidon2>;
 
-pub fn segment_prover() -> Result<Box<dyn SegmentProver>> {
+pub fn segment_prover(hashfn: &str) -> Result<Box<dyn SegmentProver>> {
+    // [blake2b-inner] ⛔ THE GPU PATH IS POSEIDON2-ONLY AND THAT IS NOT AN OVERSIGHT HERE:
+    // risc0-zkp's CUDA HAL ships `CudaHashPoseidon2` and `CudaHashSha256` and no blake2b,
+    // so there is no type to construct. Bailing by name is honest; silently returning a
+    // poseidon2 prover for a blake2b request would produce a receipt labelled blake2b and
+    // sealed with poseidon2, which verifies nowhere and says nothing about why.
+    anyhow::ensure!(
+        hashfn == "poseidon2",
+        "the CUDA segment prover supports only \"poseidon2\"; got \"{hashfn}\""
+    );
     let hal_factory = || {
         let hal = Rc::new(CudaHalPoseidon2::new());
         let circuit_hal = Rc::new(CudaCircuitHalPoseidon2::new(hal.clone()));

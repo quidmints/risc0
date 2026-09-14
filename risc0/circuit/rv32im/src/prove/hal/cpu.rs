@@ -23,7 +23,7 @@ use risc0_circuit_rv32im_sys::{
 use risc0_core::scope;
 use risc0_sys::ffi_wrap;
 use risc0_zkp::{
-    core::{hash::poseidon2::Poseidon2HashSuite, log2_ceil},
+    core::{hash::blake2b::Blake2bCpuHashSuite, hash::poseidon2::Poseidon2HashSuite, log2_ceil},
     field::{map_pow, Elem, ExtElem as _, RootsOfUnity as _},
     hal::{cpu::CpuBuffer, AccumPreflight, CircuitHal},
     INV_RATE,
@@ -219,10 +219,23 @@ impl CircuitHal<CpuHal> for CpuCircuitHal {
 }
 
 #[allow(dead_code)]
-pub fn segment_prover() -> Result<Box<dyn SegmentProver>> {
-    let hal_factory = || {
-        let suite = Poseidon2HashSuite::new_suite();
-        (Rc::new(CpuHal::new(suite)), Rc::new(CpuCircuitHal))
+pub fn segment_prover(hashfn: &str) -> Result<Box<dyn SegmentProver>> {
+    // [blake2b-inner] THE SUITE WAS HARDCODED HERE, WHICH IS WHY THE SEGMENT PROVER WAS
+    // POSEIDON2-ONLY. Note it is not a narrowing of a choice — `prove/hal/mod.rs` already
+    // reads the hash generically off `hal.get_hash_suite()`, and the commented-out Metal
+    // line in `prove/mod.rs` still reads `segment_prover(hashfn)`. The parameter existed.
+    //
+    // ⭐ WHY IT MATTERS: a poseidon2 segment can only be verified on a chain that can
+    // afford poseidon2. Measured on Solana SBF, poseidon is 479,846,205 CU against
+    // blake2b's 49,504,582 — so "poseidon2-only" is what forced every consumer through the
+    // recursion layer (lift/join/identity) instead of verifying the segment directly.
+    let suite = match hashfn {
+        "poseidon2" => Poseidon2HashSuite::new_suite(),
+        "blake2b" => Blake2bCpuHashSuite::new_suite(),
+        _ => anyhow::bail!("unsupported hashfn for the segment prover: {hashfn}"),
+    };
+    let hal_factory = move || {
+        (Rc::new(CpuHal::new(suite.clone())), Rc::new(CpuCircuitHal))
     };
     Ok(Box::new(SegmentProverImpl::new(hal_factory)))
 }
