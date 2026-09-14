@@ -190,6 +190,156 @@ pub const POSEIDON2_CONTROL_IDS: [(&str, Digest); 32] = [
     ),
 ];
 
+/// Control IDs for included recursion programs (ZKRs), using Blake2b.
+///
+/// ⭐ **DERIVED, NOT TRANSCRIBED FROM ANYWHERE — there is no upstream blake2b table.**
+/// `risc0-zkp` ships `Blake2bCpuHashSuite` as a first-class named suite and
+/// `Program::compute_control_id` already takes a `HashSuite`, so these are simply the
+/// same 32 programs hashed under it, at `RECURSION_PO2 = 18`.
+///
+/// 🔴 **THE GENERATOR REPRODUCES ALL 64 PUBLISHED DIGESTS BEFORE EMITTING THESE** —
+/// every name under both `POSEIDON2_CONTROL_IDS` and `SHA256_CONTROL_IDS` — and it
+/// rebuilds `ALLOWED_CONTROL_ROOT` by the same `BTreeSet`-ordered construction
+/// `receipt/succinct.rs` uses, requiring a match, before computing the blake2b root.
+/// A table from a harness that could not reproduce what is published would be a list
+/// of numbers rather than a result.
+pub const BLAKE2B_CONTROL_IDS: [(&str, Digest); 32] = [
+    (
+        "identity.zkr",
+        digest!("a6d3e3d1746d3457e07adf6553de73d52cf28734d16a8376f1c5553773f08e98"),
+    ),
+    (
+        "join.zkr",
+        digest!("77f3bf93e12604dc60b86f652931b00262443968c1decb5557acca3ae58b6b11"),
+    ),
+    (
+        "join_povw.zkr",
+        digest!("2ddbad2c9cb70844ed2ae08181e3e98fab886785801597de54cb87407be026d0"),
+    ),
+    (
+        "join_unwrap_povw.zkr",
+        digest!("c368d516f29d1b32d01a59908a61629325bbabee0f1c9e6b0ac536cf30efb76d"),
+    ),
+    (
+        "lift_rv32im_v2_14.zkr",
+        digest!("afd025b4515c4f3ddcb17c013068b347ddba930d8a0e134aea50247e5f58373e"),
+    ),
+    (
+        "lift_rv32im_v2_15.zkr",
+        digest!("01ceeb8b43b51451069232ba1044b33062acda1e6dd0bfff5fbebfe9f74b5933"),
+    ),
+    (
+        "lift_rv32im_v2_16.zkr",
+        digest!("45c50826bea70f5eb3c841177d2ede664eacd8795cae1f33daac655b678815fc"),
+    ),
+    (
+        "lift_rv32im_v2_17.zkr",
+        digest!("4ecbbeb734216cec3083612c1e937d4f343d1d166c3aee80f8dc1552ac9f289d"),
+    ),
+    (
+        "lift_rv32im_v2_18.zkr",
+        digest!("c223ed157f0bd011452461399af57a724f4437133f5f48340dd7b1ef4682448d"),
+    ),
+    (
+        "lift_rv32im_v2_19.zkr",
+        digest!("4d25ae695a0cbc67f3c14b21747424a28460c9d96894a070bd665729d3b60886"),
+    ),
+    (
+        "lift_rv32im_v2_20.zkr",
+        digest!("8d3cbb389bcdd0ddab2f0f8db3fc5a4400a82bfd6920835ff54a6eee7484c83a"),
+    ),
+    (
+        "lift_rv32im_v2_21.zkr",
+        digest!("3100f33e509588b494406f2e206ab4fc9ae77410ea23dd9de91e8db89519e81e"),
+    ),
+    (
+        "lift_rv32im_v2_22.zkr",
+        digest!("919c7b9b20333a556c57b5f045918d71c6a4eebba701b420d5a849ff9d6a4088"),
+    ),
+    (
+        "lift_rv32im_v2_23.zkr",
+        digest!("ab8110d2291a55c73ff554221dee33d66d283124516666864b976fb59b519175"),
+    ),
+    (
+        "lift_rv32im_v2_24.zkr",
+        digest!("044f3956070ed8d073e1324aeeea12874765e8b80d90beb716c4a06321e9c7f4"),
+    ),
+    (
+        "lift_rv32im_v2_povw_14.zkr",
+        digest!("c99ccf3c9e5d948e36c84af71b8a276daf66b8455d7caa30e3ff89bfb6c7ef57"),
+    ),
+    (
+        "lift_rv32im_v2_povw_15.zkr",
+        digest!("e0c5925f501f01b042064ee667e1c56ddcfa807267535cb509226443835b8d06"),
+    ),
+    (
+        "lift_rv32im_v2_povw_16.zkr",
+        digest!("8f4d1df23d60b021ca0a20ea97ddef749ee8688b5c59124b869f5e50664e7886"),
+    ),
+    (
+        "lift_rv32im_v2_povw_17.zkr",
+        digest!("fa9d593f0f1a1bf887da38cd15ac74115e294d3433946bf03fd952f17ed9a737"),
+    ),
+    (
+        "lift_rv32im_v2_povw_18.zkr",
+        digest!("6c1ec5fc485b43780e070547c2cf84a57ae1aef7083a08eab189195f1a212385"),
+    ),
+    (
+        "lift_rv32im_v2_povw_19.zkr",
+        digest!("26635227ae11f58d3e1a0863421946bdf30883e0524377d59434636ad53ba0ae"),
+    ),
+    (
+        "lift_rv32im_v2_povw_20.zkr",
+        digest!("09a35538bbc29dc9aae0507457294525e348e0397a2439a15821d8290d3cd9f7"),
+    ),
+    (
+        "lift_rv32im_v2_povw_21.zkr",
+        digest!("d249a580dadb0483d0a0852ca424f32359c494334ea264ee4bebce6c193a35b9"),
+    ),
+    (
+        "lift_rv32im_v2_povw_22.zkr",
+        digest!("9339c1483a7e322f497a5b2e19d429104c6c6d8dc1f521249720fdbe9de9bea2"),
+    ),
+    (
+        "lift_rv32im_v2_povw_23.zkr",
+        digest!("bc5e679268706e6d2c85d701dc502da924ea1e8ec4bf82085b292c305fc83198"),
+    ),
+    (
+        "lift_rv32im_v2_povw_24.zkr",
+        digest!("f6208f5e63f7d69df153559d3abea06ba39f79e0dda9f6d6864c01f76b173467"),
+    ),
+    (
+        "resolve.zkr",
+        digest!("c99a543f206a0e8bb19e0153b1e236318ad5120fed53a4fc1f4c7b3ae1e8eda5"),
+    ),
+    (
+        "resolve_povw.zkr",
+        digest!("a6e3ed4784ac7c6f6782781c85fbddb8fdbba0932039ff12e17298f7634afeeb"),
+    ),
+    (
+        "resolve_unwrap_povw.zkr",
+        digest!("2fb99c02797a72c74b5cbdef6b807cf6e0ded6240892d7293b3f63e97fef647f"),
+    ),
+    (
+        "test_recursion_circuit.zkr",
+        digest!("7b35d8fc23d4639906b2a6b19ce9d00abcdaccf2dfc766ef56e2529058c3c00d"),
+    ),
+    (
+        "union.zkr",
+        digest!("a7d559722c4e02493d77cd8dc1f1346e1180e2d93abd214e91926be747b0649e"),
+    ),
+    (
+        "unwrap_povw.zkr",
+        digest!("7c0b38439d0d3350fcf9dd0126a0d44112e3a43fa706b09f385c13930aeb0c06"),
+    ),
+];
+
+/// Root of the Merkle tree over the blake2b control IDs of the allowed set, using
+/// Blake2b. Same leaf set and same `po2_max` (`DEFAULT_MAX_PO2 = 22`) as
+/// [ALLOWED_CONTROL_ROOT], which is poseidon2.
+pub const BLAKE2B_ALLOWED_CONTROL_ROOT: Digest =
+    digest!("7baaf327af40c2ce2f11d55fc91d1a29d1003827310534d58244f2d19eb28ddd");
+
 /// Control IDs for included recursion programs (ZKRs), using SHA-256.
 pub const SHA256_CONTROL_IDS: [(&str, Digest); 32] = [
     (
