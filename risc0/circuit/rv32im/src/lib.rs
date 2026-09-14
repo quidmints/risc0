@@ -28,7 +28,8 @@ use derive_more::Debug;
 use risc0_binfmt::PovwNonce;
 use risc0_zkp::{
     adapter::CircuitInfo as _,
-    core::{digest::Digest, hash::poseidon2::Poseidon2HashSuite},
+    core::{digest::Digest, hash::poseidon2::Poseidon2HashSuite, hash::HashSuite},
+    field::baby_bear::BabyBear,
     layout::Tree,
     verify::VerificationError,
 };
@@ -48,6 +49,20 @@ pub const MAX_INSN_CYCLES: usize = 25_000;
 pub const MAX_INSN_CYCLES_LOWER_PO2: usize = 2_000;
 
 pub fn verify(seal: &[u32]) -> Result<(), VerificationError> {
+    verify_with_suite(seal, &Poseidon2HashSuite::new_suite())
+}
+
+/// [verify], with the hash suite supplied rather than assumed.
+///
+/// [verify] hardcoded `Poseidon2HashSuite` and took no suite argument, so a segment
+/// sealed with any other hash could be PROVED (once the prover's HAL accepted one)
+/// and then never verified — the signature had nowhere to put the answer. That is
+/// why this is additive: `verify` keeps its behaviour and its callers, and only a
+/// caller that knows the suite reaches for this one.
+pub fn verify_with_suite(
+    seal: &[u32],
+    hash_suite: &HashSuite<BabyBear>,
+) -> Result<(), VerificationError> {
     tracing::debug!("verify");
 
     // We don't have a `code' buffer to verify.
@@ -59,8 +74,7 @@ pub fn verify(seal: &[u32]) -> Result<(), VerificationError> {
 
     let seal = &seal[1..];
 
-    let hash_suite = Poseidon2HashSuite::new_suite();
-    risc0_zkp::verify::verify(&CircuitImpl, &hash_suite, seal, check_code_fn)
+    risc0_zkp::verify::verify(&CircuitImpl, hash_suite, seal, check_code_fn)
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq)]

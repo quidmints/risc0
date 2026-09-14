@@ -101,12 +101,18 @@ impl SegmentReceipt {
             });
         }
 
-        if self.hashfn != "poseidon2" {
-            return Err(VerificationError::InvalidHashSuite);
-        }
+        // [blake2b-inner] WAS `if self.hashfn != "poseidon2" { return Err(...) }`.
+        // Resolving the suite from the context is what the SUCCINCT verifier already
+        // does (`receipt/succinct.rs`), and it is strictly narrower than the literal:
+        // an unknown name still fails with InvalidHashSuite, but a name the context
+        // knows now reaches the circuit instead of being refused by spelling.
+        let suite = ctx
+            .suites
+            .get(&self.hashfn)
+            .ok_or(VerificationError::InvalidHashSuite)?;
 
         tracing::debug!("SegmentReceipt::verify_integrity_with_context");
-        risc0_circuit_rv32im::verify(&self.seal)?;
+        risc0_circuit_rv32im::verify_with_suite(&self.seal, suite)?;
         let decoded_claim = ReceiptClaim::decode_from_seal_v2(&self.seal, None)
             .or(Err(VerificationError::ReceiptFormatError))?;
 
