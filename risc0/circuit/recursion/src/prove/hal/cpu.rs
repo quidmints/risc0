@@ -24,7 +24,7 @@ use risc0_sys::ffi_wrap;
 use risc0_zkp::{
     core::{
         hash::{
-            poseidon2::Poseidon2HashSuite, poseidon_254::Poseidon254HashSuite, sha::Sha256HashSuite,
+            blake2b::Blake2bCpuHashSuite, poseidon2::Poseidon2HashSuite, poseidon_254::Poseidon254HashSuite, sha::Sha256HashSuite,
         },
         log2_ceil,
     },
@@ -168,6 +168,9 @@ pub(crate) fn recursion_prover(hashfn: &str) -> Result<Box<dyn RecursionProver>>
         "poseidon2" => Poseidon2HashSuite::new_suite(),
         "poseidon_254" => Poseidon254HashSuite::new_suite(),
         "sha-256" => Sha256HashSuite::new_suite(),
+        // [blake2b-arm] THE ENTIRE PATCH. The suite already ships in risc0-zkp;
+        // this is the line that was refusing it.
+        "blake2b" => Blake2bCpuHashSuite::new_suite(),
         _ => bail!("Unsupported hashfn: {hashfn}"),
     };
 

@@ -26,6 +26,17 @@ fn get_zkr(name: &str, hashfn: &str) -> Result<(Program, Digest)> {
         "poseidon2" => &POSEIDON2_CONTROL_IDS,
         "sha-256" => &SHA256_CONTROL_IDS,
         "poseidon_254" => &[("identity.zkr", BN254_IDENTITY_CONTROL_ID)],
+        // [blake2b-arm] THE SECOND GAP, and it is a SECOND CRATE. risc0-circuit-recursion's
+        // HAL arm lets the PROVER be built; this table is what lets a program be LOOKED UP
+        // for that hashfn. The digest is `Program::compute_control_id(Blake2bCpuHashSuite)`
+        // on identity.zkr at po2=18, measured by the sibling binary whose harness first
+        // reproduces the published poseidon2 and sha-256 ids.
+        // ⚠️ Shaped exactly like the poseidon_254 arm above — RISC Zero already ships a
+        // one-entry identity-only table for a hashfn, so this is precedented, not novel.
+        "blake2b" => &[(
+            "identity.zkr",
+            risc0_zkp::digest!("a6d3e3d1746d3457e07adf6553de73d52cf28734d16a8376f1c5553773f08e98"),
+        )],
         _ => bail!("no control id found for {name} with {hashfn}"),
     };
 
