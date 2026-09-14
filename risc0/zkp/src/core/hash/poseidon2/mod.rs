@@ -38,6 +38,59 @@ pub use self::{
 /// The 'rate' of the sponge, i.e. how much we can safely add/remove per mixing.
 pub const CELLS_RATE: usize = 16;
 
+
+#[allow(missing_docs)]
+/// [sbf-meter] CU accounting for the hashing side of verification. Six u64 words at a fixed
+/// runtime-heap address (writable statics are rejected by the SBF loader):
+/// [perm_cu, perm_calls, hashfn_cu, hashfn_calls, rng_cu, rng_calls].
+#[cfg(target_os = "solana")]
+pub mod meter {
+    extern "C" {
+        fn sol_remaining_compute_units() -> u64;
+    }
+    const BASE: *mut u64 = 0x300000040 as *mut u64;
+    /// Slots 13.. live at their own base: widening BASE past ~word 21 collided with
+    /// runtime-owned memory (a stored counter got dereferenced as a pointer).
+    const BASE2: *mut u64 = 0x300001000 as *mut u64;
+    #[inline(always)]
+    fn slot(i: usize) -> *mut u64 { unsafe { if i < 13 { BASE.add(i) } else { BASE2.add(i - 13) } } }
+    #[inline(always)]
+    pub fn now() -> u64 { unsafe { sol_remaining_compute_units() } }
+    #[inline(always)]
+    pub fn account(s: usize, start: u64) {
+        let spent = start.saturating_sub(now());
+        unsafe { *slot(s) += spent; *slot(s + 1) += 1; }
+    }
+    pub fn read() -> [u64; 33] { unsafe { core::array::from_fn(|i| *slot(i)) } }
+    pub fn reset() { unsafe { for i in 0..33 { *slot(i) = 0; } *BASE.add(7) = u64::MAX; } }
+    /// per-query: 6 max, 7 min, 8 sum, 9 count, 10 perm CU inside the max query, 11 CU at loop start, 12 CU at loop end
+    pub fn qaccount(q0: u64, p0: u64) {
+        let spent = q0.saturating_sub(now());
+        let perm = read()[0] - p0;
+        unsafe {
+            if spent > *BASE.add(6) { *BASE.add(6) = spent; *BASE.add(10) = perm; }
+            if spent < *BASE.add(7) { *BASE.add(7) = spent; }
+            *BASE.add(8) += spent; *BASE.add(9) += 1;
+        }
+    }
+    /// 29 = CU remaining at risc0-zkp verify() entry; 30 = at end of globals/code-root read
+    pub fn mark(i: usize) { unsafe { *slot(i) = now(); } }
+    pub fn qmark_before_loop() { unsafe { *BASE.add(11) = now(); } }
+    pub fn qmark_after_loop() { unsafe { *BASE.add(12) = now(); } }
+}
+#[cfg(not(target_os = "solana"))]
+#[allow(missing_docs)]
+pub mod meter {
+    #[inline(always)] pub fn now() -> u64 { 0 }
+    #[inline(always)] pub fn account(_slot: usize, _start: u64) {}
+    pub fn read() -> [u64; 33] { [0; 33] }
+    pub fn reset() {}
+    pub fn qaccount(_q0: u64, _p0: u64) {}
+    pub fn mark(_i: usize) {}
+    pub fn qmark_before_loop() {}
+    pub fn qmark_after_loop() {}
+}
+
 /// The size of the hash output in cells (~ 248 bits)
 pub const CELLS_OUT: usize = 8;
 
@@ -46,7 +99,8 @@ struct Poseidon2HashFn;
 
 impl HashFn<BabyBear> for Poseidon2HashFn {
     fn hash_pair(&self, a: &Digest, b: &Digest) -> Box<Digest> {
-        let both: Vec<BabyBearElem> = a
+        let __t = meter::now();
+        let __r = (|| {        let both: Vec<BabyBearElem> = a
             .as_words()
             .iter()
             .chain(b.as_words())
@@ -57,16 +111,27 @@ impl HashFn<BabyBear> for Poseidon2HashFn {
             assert!(elem.is_reduced());
         }
         to_digest(unpadded_hash(both.iter()))
+        })();
+        meter::account(2, __t);
+        __r
     }
 
     fn hash_elem_slice(&self, slice: &[BabyBearElem]) -> Box<Digest> {
-        to_digest(unpadded_hash(slice.iter()))
+        let __t = meter::now();
+        let __r = (|| {        to_digest(unpadded_hash(slice.iter()))
+        })();
+        meter::account(2, __t);
+        __r
     }
 
     fn hash_ext_elem_slice(&self, slice: &[BabyBearExtElem]) -> Box<Digest> {
-        to_digest(unpadded_hash(
+        let __t = meter::now();
+        let __r = (|| {        to_digest(unpadded_hash(
             slice.iter().flat_map(|ee| ee.subelems().iter()),
         ))
+        })();
+        meter::account(2, __t);
+        __r
     }
 
     /// Checks if all words in the digest are less than the Baby Bear modulus.
@@ -200,6 +265,13 @@ fn partial_round(cells: &mut [BabyBearElem; CELLS], round: usize) {
 
 /// The raw sponge mixing function
 pub fn poseidon2_mix(cells: &mut [BabyBearElem; CELLS]) {
+    let __t = meter::now();
+    poseidon2_mix_inner(cells);
+    meter::account(0, __t);
+}
+
+#[inline(never)]
+fn poseidon2_mix_inner(cells: &mut [BabyBearElem; CELLS]) {
     let mut round = 0;
 
     // First linear layer.

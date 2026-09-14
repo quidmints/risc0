@@ -18,6 +18,7 @@ use core::ops::DerefMut;
 use risc0_core::field::{Elem, ExtElem, Field, RootsOfUnity};
 
 use super::Verifier;
+use crate::core::hash::poseidon2::meter as pmeter;
 use crate::{
     core::{
         hash::HashFn,
@@ -109,6 +110,7 @@ where
         // Prep the folding verifiers
         let rounds_capacity = log2_ceil(degree.div_ceil(FRI_FOLD).div_ceil(FRI_FOLD_PO2));
         let mut rounds = Vec::with_capacity(rounds_capacity);
+        let __m = pmeter::now();
         while degree > FRI_MIN_DEGREE {
             rounds.push(VerifyRoundInfo::new(
                 self.iop().deref_mut(),
@@ -127,6 +129,8 @@ where
             degree,
             rounds_capacity
         );
+        pmeter::account(25, __m);
+        let __m = pmeter::now();
         // Grab the final coeffs + commit
         let final_coeffs = self
             .iop()
@@ -135,9 +139,14 @@ where
         self.iop().commit(&final_digest);
         // Get the generator for the final polynomial evaluations
         let gen = <F::Elem as RootsOfUnity>::ROU_FWD[log2_ceil(domain)];
+        pmeter::account(27, __m);
         // Do queries
         let mut poly_buf: Vec<F::ExtElem> = Vec::with_capacity(degree);
+        // [sbf-meter] per-query CU: slots 6..10 = [q_max, q_min, q_sum, q_count, q_max_perm]
+        crate::core::hash::poseidon2::meter::qmark_before_loop();
         for _ in 0..QUERIES {
+            let __q0 = crate::core::hash::poseidon2::meter::now();
+            let __p0 = crate::core::hash::poseidon2::meter::read()[0];
             let mut pos = self.iop().random_bits(log2_ceil(orig_domain)) as usize;
             // Do the 'inner' verification for this index
             let mut goal = inner(pos)?;
@@ -158,7 +167,9 @@ where
             if fx != goal {
                 return Err(VerificationError::InvalidProof);
             }
+            crate::core::hash::poseidon2::meter::qaccount(__q0, __p0);
         }
+        crate::core::hash::poseidon2::meter::qmark_after_loop();
         Ok(())
     }
 }

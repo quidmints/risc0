@@ -19,7 +19,7 @@ use risc0_core::field::{
     ExtElem,
 };
 
-use super::{consts::CELLS, poseidon2_mix, CELLS_OUT, CELLS_RATE};
+use super::{consts::CELLS, meter, poseidon2_mix, CELLS_OUT, CELLS_RATE};
 use crate::core::{digest::Digest, hash::Rng};
 
 /// A random number generator driven by Poseidon2
@@ -49,7 +49,8 @@ impl Poseidon2Rng {
 
 impl Rng<BabyBear> for Poseidon2Rng {
     fn mix(&mut self, val: &Digest) {
-        // if switching from squeezing, do a mix
+        let __t = meter::now();
+        let __r = (|| {        // if switching from squeezing, do a mix
         if self.pool_used != 0 {
             poseidon2_mix(&mut self.cells);
             self.pool_used = 0;
@@ -60,6 +61,9 @@ impl Rng<BabyBear> for Poseidon2Rng {
         }
         // Mix
         poseidon2_mix(&mut self.cells);
+        })();
+        meter::account(4, __t);
+        __r
     }
 
     fn random_bits(&mut self, bits: usize) -> u32 {
@@ -71,19 +75,25 @@ impl Rng<BabyBear> for Poseidon2Rng {
             }
         }
         ((1 << bits) - 1) & val
+
     }
 
     fn random_elem(&mut self) -> Elem {
-        if self.pool_used == CELLS_RATE {
+        let __t = meter::now();
+        let __r = (|| {        if self.pool_used == CELLS_RATE {
             poseidon2_mix(&mut self.cells);
             self.pool_used = 0;
         }
         let out = self.cells[self.pool_used];
         self.pool_used += 1;
         out
+        })();
+        meter::account(4, __t);
+        __r
     }
 
     fn random_ext_elem(&mut self) -> BabyBearExtElem {
         ExtElem::from_subelems((0..4).map(|_| self.random_elem()))
+
     }
 }
