@@ -40,6 +40,8 @@ use crate::{
     INV_RATE, MAX_CYCLES_PO2, QUERIES,
 };
 
+use crate::core::hash::poseidon2::meter as pmeter;
+
 // If true, enable tracing of verifier internals.
 const VERIFY_TRACE_ENABLED: bool = false;
 
@@ -210,8 +212,10 @@ impl<'a, F: Field> Verifier<'a, F> {
         let domain = INV_RATE * self.tot_cycles;
         let hashfn = self.suite.hashfn.as_ref();
 
+        let __m = pmeter::now();
         let merkle =
             MerkleTreeVerifier::new(self.iop().deref_mut(), hashfn, domain, group_size, QUERIES)?;
+        pmeter::account(13, __m);
         self.merkle_verifiers[reg_group_id] = Some(merkle);
         let root = self.merkle_verifiers[reg_group_id].as_ref().unwrap().root();
         trace_if_enabled!(
@@ -298,6 +302,7 @@ impl<'a, F: Field> Verifier<'a, F> {
 
         let hashfn = self.suite.hashfn.as_ref();
         let domain = INV_RATE * self.tot_cycles;
+        let __m = pmeter::now();
         let check_merkle = MerkleTreeVerifier::new(
             self.iop().deref_mut(),
             hashfn,
@@ -323,6 +328,8 @@ impl<'a, F: Field> Verifier<'a, F> {
         let back_one = F::Elem::ROU_REV[self.po2];
 
         // Read the U coeffs (the interpolations of the taps) + commit their hash.
+        pmeter::account(15, __m);
+        let __m = pmeter::now();
         let num_taps = self.taps.tap_size();
         let coeff_u = self
             .iop()
@@ -330,6 +337,8 @@ impl<'a, F: Field> Verifier<'a, F> {
         let hash_u = hashfn.hash_ext_elem_slice(coeff_u);
         self.iop().commit(&hash_u);
 
+        pmeter::account(17, __m);
+        let __m = pmeter::now();
         // Now, convert U polynomials from coefficient form to evaluation form
         let mut cur_pos = 0;
         let mut eval_u = Vec::with_capacity(num_taps);
@@ -348,7 +357,11 @@ impl<'a, F: Field> Verifier<'a, F> {
         #[cfg(not(target_os = "zkvm"))]
         tracing::debug!("> compute_polynomial");
 
+        pmeter::account(19, __m);
+        let __m = pmeter::now();
         let result = validity_fn(&poly_mix, &eval_u);
+        pmeter::account(21, __m);
+        let __m = pmeter::now();
         trace_if_enabled!("Computed polynomial: {result:?}");
 
         // Now generate the check polynomial
@@ -426,6 +439,7 @@ impl<'a, F: Field> Verifier<'a, F> {
             Self::CHECK_SIZE,
             "Miscalculated capacity for check_mix_pows"
         );
+        pmeter::account(23, __m);
         let gen = <F::Elem as RootsOfUnity>::ROU_FWD[log2_ceil(domain)];
         let hashfn = self.suite.hashfn.as_ref();
         self.fri_verify(|idx| {
@@ -507,6 +521,7 @@ where
         return Err(VerificationError::ReceiptFormatError);
     }
 
+    pmeter::mark(29);
     let mut verifier = Verifier::<F>::new(circuit.get_taps(), suite, seal);
     verifier.commit_circuit_info(&C::CIRCUIT_INFO);
 
@@ -517,6 +532,7 @@ where
     // verifier by the prover, and therefore should be committed at the start of verification.
     let (out, po2) = verifier.read_slice_with_po2(C::OUTPUT_SIZE)?;
 
+    pmeter::mark(30);
     // Get merkle root for the code merkle tree.
     // The code merkle tree contains the control instructions for the zkVM.
     let code_root = verifier.verify_group(REGISTER_GROUP_CODE)?;
