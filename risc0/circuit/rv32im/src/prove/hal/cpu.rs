@@ -23,7 +23,10 @@ use risc0_circuit_rv32im_sys::{
 use risc0_core::scope;
 use risc0_sys::ffi_wrap;
 use risc0_zkp::{
-    core::{hash::blake2b::Blake2bCpuHashSuite, hash::poseidon2::Poseidon2HashSuite, log2_ceil},
+    core::{
+        hash::blake2b::Blake2bCpuHashSuite, hash::blake3::Blake3CpuHashSuite,
+        hash::poseidon2::Poseidon2HashSuite, log2_ceil,
+    },
     field::{map_pow, Elem, ExtElem as _, RootsOfUnity as _},
     hal::{cpu::CpuBuffer, AccumPreflight, CircuitHal},
     INV_RATE,
@@ -232,6 +235,7 @@ pub fn segment_prover(hashfn: &str) -> Result<Box<dyn SegmentProver>> {
     let suite = match hashfn {
         "poseidon2" => Poseidon2HashSuite::new_suite(),
         "blake2b" => Blake2bCpuHashSuite::new_suite(),
+        "blake3" => Blake3CpuHashSuite::new_suite(),
         _ => anyhow::bail!("unsupported hashfn for the segment prover: {hashfn}"),
     };
     let hal_factory = move || {

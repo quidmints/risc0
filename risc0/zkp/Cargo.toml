@@ -14,6 +14,9 @@ harness = false
 [dependencies]
 anyhow = { version = "1.0", default-features = false }
 blake2 = { version = "0.10.6", default-features = false }
+# default features pull rayon, whose registry is a writable static the Solana
+# loader refuses — the same failure that made SP1's verifier ELF unloadable.
+blake3 = { version = "1", default-features = false }
 borsh = { version = "1.5", default-features = false, features = ["derive"] }
 bytemuck = { version = "1.12", features = ["derive"] }
 cfg-if = "1.0"
