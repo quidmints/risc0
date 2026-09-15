@@ -108,6 +108,7 @@ pub fn hash_suite_from_name(name: impl AsRef<str>) -> Option<HashSuite<BabyBear>
         "sha-256" => Some(sha::Sha256HashSuite::new_suite()),
         "poseidon2" => Some(poseidon2::Poseidon2HashSuite::new_suite()),
         "blake2b" => Some(blake2b::Blake2bCpuHashSuite::new_suite()),
+        "blake3" => Some(blake3::Blake3CpuHashSuite::new_suite()),
         #[cfg(feature = "prove")]
         "poseidon_254" => Some(poseidon_254::Poseidon254HashSuite::new_suite()),
         _ => None,
