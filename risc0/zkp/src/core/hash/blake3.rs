@@ -39,6 +39,7 @@ use risc0_core::field::{
     Elem, ExtElem,
 };
 
+use super::super::hash::poseidon2::meter;
 use super::{HashFn, HashSuite, Rng, RngFactory};
 use crate::core::digest::Digest;
 
@@ -112,30 +113,48 @@ impl<T: Blake3> Blake3HashFn<T> {
 impl<T: Blake3> HashFn<BabyBear> for Blake3HashFn<T> {
     /// 🔑 THE SYSCALL-SHAPED ONE: `blake3(a ‖ b)`, byte for byte what
     /// `solana_program::blake3::hashv(&[a, b])` computes.
+    ///
+    /// ⚠️ METERED ON POSEIDON2'S SLOT 2/3 ON PURPOSE. A receipt is sealed with ONE suite, so
+    /// the two can never both be counting — and reusing the slots means the SBPF probe's
+    /// existing `hashfn_cu`/`hashfn_calls` report works unchanged. Counting the calls is the
+    /// whole point: the shipping figure was inferred from a hash COUNT derived off a split
+    /// measured on a different circuit, and that inference has already been wrong by 15% once.
     fn hash_pair(&self, a: &Digest, b: &Digest) -> Box<Digest> {
+        let __t = meter::now();
         let concat = [a.as_bytes(), b.as_bytes()].concat();
-        Box::new(Digest::from(T::blake3(concat)))
+        let __r = Box::new(Digest::from(T::blake3(concat)));
+        meter::account(2, __t);
+        __r
     }
 
     /// ⚠️ BIG-ENDIAN MONTGOMERY, mirroring `blake2b.rs` exactly. The serialisation is
     /// part of the hash, so a verifier that reads elements back any other way computes a
     /// different digest and fails with no clue why.
     fn hash_elem_slice(&self, slice: &[BabyBearElem]) -> Box<Digest> {
+        // ⚠️ TIMER ABOVE THE SERIALISATION, NOT BELOW IT. poseidon2's meter wraps its WHOLE
+        // body; starting after the Vec build would make blake3 look cheaper than it is, and
+        // the comparison is the entire point of the instrument.
+        let __t2 = meter::now();
         let mut data = Vec::<u8>::new();
         for el in slice {
             data.extend_from_slice(el.as_u32_montgomery().to_be_bytes().as_slice());
         }
-        Box::new(Digest::from(T::blake3(data)))
+        let __r2 = Box::new(Digest::from(T::blake3(data)));
+        meter::account(2, __t2);
+        __r2
     }
 
     fn hash_ext_elem_slice(&self, slice: &[BabyBearExtElem]) -> Box<Digest> {
+        let __t2 = meter::now();
         let mut data = Vec::<u8>::new();
         for ext_el in slice {
             for el in ext_el.subelems() {
                 data.extend_from_slice(el.as_u32_montgomery().to_be_bytes().as_slice());
             }
         }
-        Box::new(Digest::from(T::blake3(data)))
+        let __r2 = Box::new(Digest::from(T::blake3(data)));
+        meter::account(2, __t2);
+        __r2
     }
 }
 
