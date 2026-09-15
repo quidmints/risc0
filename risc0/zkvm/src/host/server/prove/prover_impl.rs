@@ -74,9 +74,9 @@ impl ProverServer for ProverImpl {
         );
 
         ensure!(
-            matches!(self.opts.hashfn.as_str(), "poseidon2" | "blake2b"),
+            matches!(self.opts.hashfn.as_str(), "poseidon2" | "blake2b" | "blake3"),
             "provided `ProverOpts` has unsupported `hashfn` value of \"{}\"; \
-            supported `hashfn` values are: \"poseidon2\", \"blake2b\".",
+            supported `hashfn` values are: \"poseidon2\", \"blake2b\", \"blake3\".",
             &self.opts.hashfn
         );
 
@@ -251,9 +251,9 @@ impl ProverServer for ProverImpl {
         tracing::debug!("prove_segment_core");
 
         ensure!(
-            matches!(self.opts.hashfn.as_str(), "poseidon2" | "blake2b"),
+            matches!(self.opts.hashfn.as_str(), "poseidon2" | "blake2b" | "blake3"),
             "provided `ProverOpts` has unsupported `hashfn` value of \"{}\"; \
-            supported `hashfn` values are: \"poseidon2\", \"blake2b\".",
+            supported `hashfn` values are: \"poseidon2\", \"blake2b\", \"blake3\".",
             &self.opts.hashfn
         );
 
