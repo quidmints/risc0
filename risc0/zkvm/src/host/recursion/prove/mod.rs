@@ -548,9 +548,19 @@ pub struct Prover {
 /// Utility macro to compress repeated checks that a receipt uses the poseidon2 hash.
 macro_rules! ensure_poseidon2 {
     ($receipt:expr) => {
+        // [blake3] WAS `== "poseidon2"`. The name was doing two jobs: gating what the
+        // recursion PROGRAM can verify, and gating what the HOST will hand it. Only the
+        // first is a real constraint, and it is enforced by the circuit itself — so this
+        // now admits blake3 and lets the CIRCUIT be the judge.
+        //
+        // 🔑 WHY IT MATTERS: `new_lift_inner` derives `inner_hash_suite` from the SEGMENT's
+        // hashfn and uses it to hash the control-ID Merkle root. With a poseidon2 segment
+        // that hashing asserts `is_reduced()` on every word, which a blake digest is not —
+        // the panic I diagnosed as a structural wall. With a BLAKE3 segment the inner suite
+        // IS blake3, which hashes arbitrary bytes, and the assertion never runs.
         ensure!(
-            $receipt.hashfn == "poseidon2",
-            "recursion programs only supports poseidon2 hashfn; received {}",
+            matches!($receipt.hashfn.as_str(), "poseidon2" | "blake3" | "blake2b"),
+            "recursion programs support poseidon2, blake3 or blake2b; received {}",
             $receipt.hashfn
         );
     };
