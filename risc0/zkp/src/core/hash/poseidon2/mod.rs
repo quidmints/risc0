@@ -61,8 +61,8 @@ pub mod meter {
         let spent = start.saturating_sub(now());
         unsafe { *slot(s) += spent; *slot(s + 1) += 1; }
     }
-    pub fn read() -> [u64; 36] { unsafe { core::array::from_fn(|i| *slot(i)) } }
-    pub fn reset() { unsafe { for i in 0..36 { *slot(i) = 0; } *BASE.add(7) = u64::MAX; } }
+    pub fn read() -> [u64; 38] { unsafe { core::array::from_fn(|i| *slot(i)) } }
+    pub fn reset() { unsafe { for i in 0..38 { *slot(i) = 0; } *BASE.add(7) = u64::MAX; } }
     /// per-query: 6 max, 7 min, 8 sum, 9 count, 10 perm CU inside the max query, 11 CU at loop start, 12 CU at loop end
     pub fn qaccount(q0: u64, p0: u64) {
         let spent = q0.saturating_sub(now());
@@ -75,15 +75,18 @@ pub mod meter {
     }
     /// 29 = CU remaining at risc0-zkp verify() entry; 30 = at end of globals/code-root read
     pub fn mark(i: usize) { unsafe { *slot(i) = now(); } }
-    pub fn qmark_before_loop() { unsafe { *BASE.add(11) = now(); } }
-    pub fn qmark_after_loop() { unsafe { *BASE.add(12) = now(); } }
+    /// 36/37 also capture the HASH bill at the loop boundary. Without this the query loop is one
+    /// opaque 25.6M number and there is no way to say how it responds to putting blake3 on the
+    /// `sol_blake3` syscall — which is the whole question when choosing QUERIES.
+    pub fn qmark_before_loop() { unsafe { *BASE.add(11) = now(); *slot(36) = *slot(2); } }
+    pub fn qmark_after_loop() { unsafe { *BASE.add(12) = now(); *slot(37) = *slot(2); } }
 }
 #[cfg(not(target_os = "solana"))]
 #[allow(missing_docs)]
 pub mod meter {
     #[inline(always)] pub fn now() -> u64 { 0 }
     #[inline(always)] pub fn account(_slot: usize, _start: u64) {}
-    pub fn read() -> [u64; 36] { [0; 36] }
+    pub fn read() -> [u64; 38] { [0; 38] }
     pub fn reset() {}
     pub fn qaccount(_q0: u64, _p0: u64) {}
     pub fn mark(_i: usize) {}
