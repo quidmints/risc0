@@ -40,10 +40,16 @@ pub const CELLS_RATE: usize = 16;
 
 
 #[allow(missing_docs)]
+/// ⚠️ GATED BEHIND `sbf-meter`, WHICH IS OFF BY DEFAULT — the instrument is NOT free and must not
+/// ship. Each `now()`/`account()` pair is two `sol_remaining_compute_units` syscalls at a measured
+/// **106 CU** each, so a metered hash costs ~212 CU MORE than the same hash unmetered. At 4,630
+/// hash calls that is ~981,560 CU on the succinct receipt — about 4% of the bill, and enough to
+/// make an optimisation look smaller than it is.
+///
 /// [sbf-meter] CU accounting for the hashing side of verification. Six u64 words at a fixed
 /// runtime-heap address (writable statics are rejected by the SBF loader):
 /// [perm_cu, perm_calls, hashfn_cu, hashfn_calls, rng_cu, rng_calls].
-#[cfg(target_os = "solana")]
+#[cfg(all(target_os = "solana", feature = "sbf-meter"))]
 pub mod meter {
     extern "C" {
         fn sol_remaining_compute_units() -> u64;
@@ -61,8 +67,8 @@ pub mod meter {
         let spent = start.saturating_sub(now());
         unsafe { *slot(s) += spent; *slot(s + 1) += 1; }
     }
-    pub fn read() -> [u64; 38] { unsafe { core::array::from_fn(|i| *slot(i)) } }
-    pub fn reset() { unsafe { for i in 0..38 { *slot(i) = 0; } *BASE.add(7) = u64::MAX; } }
+    pub fn read() -> [u64; 42] { unsafe { core::array::from_fn(|i| *slot(i)) } }
+    pub fn reset() { unsafe { for i in 0..42 { *slot(i) = 0; } *BASE.add(7) = u64::MAX; } }
     /// per-query: 6 max, 7 min, 8 sum, 9 count, 10 perm CU inside the max query, 11 CU at loop start, 12 CU at loop end
     pub fn qaccount(q0: u64, p0: u64) {
         let spent = q0.saturating_sub(now());
@@ -75,21 +81,26 @@ pub mod meter {
     }
     /// 29 = CU remaining at risc0-zkp verify() entry; 30 = at end of globals/code-root read
     pub fn mark(i: usize) { unsafe { *slot(i) = now(); } }
+    /// Store an exact COUNT rather than a CU span. Used to price coeff_to_eval by counting the
+    /// multiplications it actually performs instead of dividing its CU by a per-op guess — the
+    /// inference that was 4.4x wrong on hash counts earlier in this session.
+    pub fn put(i: usize, v: u64) { unsafe { *slot(i) = v; } }
     /// 36/37 also capture the HASH bill at the loop boundary. Without this the query loop is one
     /// opaque 25.6M number and there is no way to say how it responds to putting blake3 on the
     /// `sol_blake3` syscall — which is the whole question when choosing QUERIES.
     pub fn qmark_before_loop() { unsafe { *BASE.add(11) = now(); *slot(36) = *slot(2); } }
     pub fn qmark_after_loop() { unsafe { *BASE.add(12) = now(); *slot(37) = *slot(2); } }
 }
-#[cfg(not(target_os = "solana"))]
+#[cfg(not(all(target_os = "solana", feature = "sbf-meter")))]
 #[allow(missing_docs)]
 pub mod meter {
     #[inline(always)] pub fn now() -> u64 { 0 }
     #[inline(always)] pub fn account(_slot: usize, _start: u64) {}
-    pub fn read() -> [u64; 38] { [0; 38] }
+    pub fn read() -> [u64; 42] { [0; 42] }
     pub fn reset() {}
     pub fn qaccount(_q0: u64, _p0: u64) {}
     pub fn mark(_i: usize) {}
+    pub fn put(_i: usize, _v: u64) {}
     pub fn qmark_before_loop() {}
     pub fn qmark_after_loop() {}
 }

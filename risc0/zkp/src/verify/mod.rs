@@ -339,6 +339,24 @@ impl<'a, F: Field> Verifier<'a, F> {
 
         pmeter::account(17, __m);
         let __m = pmeter::now();
+        // [sbf-meter] COUNT the work instead of inferring it. poly_eval does 2 ext muls per
+        // coefficient, and is called reg.size() times per reg over reg.size() coefficients — so
+        // the multiplication count is 2 * sum(size^2), NOT anything proportional to num_taps.
+        // Computing it here is O(#regs) and lets CU/mul be divided out exactly.
+        {
+            let n_regs = self.taps.regs().count() as u64;
+            let sum_sz: u64 = self.taps.regs().map(|r| r.size() as u64).sum();
+            let sum_sq: u64 = self.taps.regs().map(|r| (r.size() * r.size()) as u64).sum();
+            let n_back: u64 = self
+                .taps
+                .regs()
+                .map(|r| (0..r.size()).map(|i| r.back(i) as u64).max().unwrap_or(0))
+                .sum();
+            pmeter::put(38, n_regs);
+            pmeter::put(39, sum_sz);
+            pmeter::put(40, sum_sq);
+            pmeter::put(41, n_back);
+        }
         // Now, convert U polynomials from coefficient form to evaluation form
         let mut cur_pos = 0;
         let mut eval_u = Vec::with_capacity(num_taps);

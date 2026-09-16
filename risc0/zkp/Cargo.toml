@@ -58,6 +58,9 @@ rustdoc-args = ["--cfg", "docsrs"]
 features = ["prove", "std"]
 
 [features]
+# The SBF CU instrument. OFF by default: it costs ~212 CU per hash call (two
+# sol_remaining_compute_units syscalls at a measured 106 CU each) and must never ship.
+sbf-meter = []
 circuit_debug = []
 cuda = ["dep:cust", "prove", "risc0-sys/cuda"]
 default = []
