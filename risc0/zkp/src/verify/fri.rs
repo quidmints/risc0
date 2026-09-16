@@ -97,12 +97,23 @@ where
         // Compute the new goal + pos
         crate::core::hash::poseidon2::meter::account(44, __f1);
         let __f2 = crate::core::hash::poseidon2::meter::now();
+        // [sbf-meter] 54/56/58 close the last unexplained span. ⚠️ FRI_FOLD IS 16, NOT 4 —
+        // `1 << FRI_FOLD_PO2` with FRI_FOLD_PO2 = 4. I read the PO2 as the value and predicted a
+        // 4-element NTT, which is why ~2,000 of 16,227 CU "could not be accounted for". A 16-point
+        // NTT is 32 butterflies and poly_eval is 16 multiplies, not 4.
+        let __g0 = crate::core::hash::poseidon2::meter::now();
         let root_po2 = log2_ceil(FRI_FOLD * round.domain);
         let inv_wk = F::Elem::ROU_REV[root_po2].pow(group);
+        crate::core::hash::poseidon2::meter::account(54, __g0);
 
+        let __g1 = crate::core::hash::poseidon2::meter::now();
         interpolate_ntt::<F::Elem, F::ExtElem>(&mut data_ext);
         bit_reverse(&mut data_ext);
+        crate::core::hash::poseidon2::meter::account(56, __g1);
+
+        let __g2 = crate::core::hash::poseidon2::meter::now();
         *goal = self.poly_eval(&data_ext, round.mix * inv_wk);
+        crate::core::hash::poseidon2::meter::account(58, __g2);
         crate::core::hash::poseidon2::meter::account(46, __f2);
 
         *pos = group;

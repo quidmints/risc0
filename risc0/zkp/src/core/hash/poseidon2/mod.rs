@@ -67,8 +67,8 @@ pub mod meter {
         let spent = start.saturating_sub(now());
         unsafe { *slot(s) += spent; *slot(s + 1) += 1; }
     }
-    pub fn read() -> [u64; 54] { unsafe { core::array::from_fn(|i| *slot(i)) } }
-    pub fn reset() { unsafe { for i in 0..54 { *slot(i) = 0; } *BASE.add(7) = u64::MAX; } }
+    pub fn read() -> [u64; 60] { unsafe { core::array::from_fn(|i| *slot(i)) } }
+    pub fn reset() { unsafe { for i in 0..60 { *slot(i) = 0; } *BASE.add(7) = u64::MAX; } }
     /// per-query: 6 max, 7 min, 8 sum, 9 count, 10 perm CU inside the max query, 11 CU at loop start, 12 CU at loop end
     pub fn qaccount(q0: u64, p0: u64) {
         let spent = q0.saturating_sub(now());
@@ -96,7 +96,7 @@ pub mod meter {
 pub mod meter {
     #[inline(always)] pub fn now() -> u64 { 0 }
     #[inline(always)] pub fn account(_slot: usize, _start: u64) {}
-    pub fn read() -> [u64; 54] { [0; 54] }
+    pub fn read() -> [u64; 60] { [0; 60] }
     pub fn reset() {}
     pub fn qaccount(_q0: u64, _p0: u64) {}
     pub fn mark(_i: usize) {}
