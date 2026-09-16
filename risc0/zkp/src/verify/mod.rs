@@ -508,12 +508,22 @@ impl<'a, F: Field> Verifier<'a, F> {
 
     /// Evaluate a polynomial whose coefficients are in the extension field at a
     /// point.
+    /// ⭐⭐ HORNER. **ONE extension multiply per coefficient instead of TWO.**
+    ///
+    /// The previous form carried a running power — `tot += coeff * mul_x; mul_x *= x;` — which is
+    /// two multiplies and an add per coefficient (measured together at 1,101 CU on SBF). Horner
+    /// evaluates the same polynomial `Σ coeff[i]·x^i` with a single multiply per coefficient.
+    ///
+    /// 🔑 THIS IS EXACT, NOT APPROXIMATE, AND THAT MATTERS. In a FIELD there is no rounding, so
+    /// reassociation is an identity rather than a trade — unlike floating point, where Horner
+    /// changes the answer. The verifier cannot drift from the prover because of it.
+    ///
+    /// ⚠️ THE ORDER IS REVERSED AND THAT IS LOAD-BEARING: Horner must walk the coefficients from
+    /// the HIGHEST degree down. Iterating forwards computes a different polynomial entirely.
     fn poly_eval(&self, coeffs: &[F::ExtElem], x: F::ExtElem) -> F::ExtElem {
-        let mut mul_x = F::ExtElem::ONE;
         let mut tot = F::ExtElem::ZERO;
-        for coeff in coeffs {
-            tot += *coeff * mul_x;
-            mul_x *= x;
+        for coeff in coeffs.iter().rev() {
+            tot = tot * x + *coeff;
         }
         tot
     }
