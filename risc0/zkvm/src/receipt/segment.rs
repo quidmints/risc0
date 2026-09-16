@@ -70,6 +70,9 @@ impl SegmentReceipt {
         &self,
         ctx: &VerifierContext,
     ) -> Result<(), VerificationError> {
+        // [sbf-meter] 33 = entry to the SEGMENT receipt verifier. Everything between `cu_before`
+        // and this mark is outer `Receipt::verify` + `CompositeReceipt` plumbing.
+        risc0_zkp::core::hash::poseidon2::meter::mark(33);
         let params = ctx
             .segment_verifier_parameters
             .as_ref()
@@ -112,6 +115,9 @@ impl SegmentReceipt {
             .ok_or(VerificationError::InvalidHashSuite)?;
 
         tracing::debug!("SegmentReceipt::verify_integrity_with_context");
+        // [sbf-meter] 34 = after the info-string checks and the suite lookup, immediately before
+        // the circuit verifier. 33->34 prices those checks; 34->31 should be ~0.
+        risc0_zkp::core::hash::poseidon2::meter::mark(34);
         risc0_circuit_rv32im::verify_with_suite(&self.seal, suite)?;
         let decoded_claim = ReceiptClaim::decode_from_seal_v2(&self.seal, None)
             .or(Err(VerificationError::ReceiptFormatError))?;

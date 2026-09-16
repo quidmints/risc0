@@ -568,5 +568,11 @@ where
 
     // There should be nothing else in the IOP, so verify that's the case.
     verifier.iop().verify_complete()?;
+    // [sbf-meter] 32 = CU remaining at zkp verify() EXIT. With 29 (entry) and the caller's 31,
+    // this closes the last open span: everything after this point is risc0-zkvm claim work
+    // (decode_from_seal_v2 plus two software sha-256 ReceiptClaim digests), which was previously
+    // lumped into an undifferentiated 28.1M "zkvm_side" bucket — 38.6% of the whole bill and the
+    // largest single item in it.
+    pmeter::mark(32);
     Ok(())
 }

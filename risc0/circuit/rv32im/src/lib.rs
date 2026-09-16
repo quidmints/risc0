@@ -64,6 +64,10 @@ pub fn verify_with_suite(
     hash_suite: &HashSuite<BabyBear>,
 ) -> Result<(), VerificationError> {
     tracing::debug!("verify");
+    // [sbf-meter] 31 = CU remaining on ENTRY to the rv32im circuit verifier. Splits the old
+    // "zkvm_side" bucket into receipt-layer plumbing (before here) and circuit setup (here to
+    // the zkp verify() entry mark at 29).
+    risc0_zkp::core::hash::poseidon2::meter::mark(31);
 
     // We don't have a `code' buffer to verify.
     let check_code_fn = |_: u32, _: &Digest| Ok(());
