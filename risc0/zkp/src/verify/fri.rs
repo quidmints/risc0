@@ -73,14 +73,21 @@ where
         let group = *pos % round.domain;
         // Get the column data
         let hashfn = self.suite.hashfn.as_ref();
+        // [sbf-meter] 42/44/46: split the per-round fold. ~16,000 CU per round is unaccounted by
+        // the operations I can see (4-element NTT, 4 multiplies, one pow), and guessing which is
+        // the expensive one is what produced the wall.
+        let __f0 = crate::core::hash::poseidon2::meter::now();
         let data = round.merkle.verify(self.iop().deref_mut(), hashfn, group)?;
+        crate::core::hash::poseidon2::meter::account(42, __f0);
+        let __f1 = crate::core::hash::poseidon2::meter::now();
+        // ⚠️ NO INTERMEDIATE `Vec` — `from_subelems` takes an ITERATOR, and this runs
+        // FRI_FOLD times per round per query (the hottest loop in the verifier). The sibling
+        // repack in `fri_verify` already passed an iterator; this one allocated.
         let mut data_ext: Vec<F::ExtElem> = (0..FRI_FOLD)
             .map(|i| {
-                let mut inps = Vec::with_capacity(F::ExtElem::EXT_SIZE);
-                for j in 0..F::ExtElem::EXT_SIZE {
-                    inps.push(data[j * FRI_FOLD + i]);
-                }
-                F::ExtElem::from_subelems(inps)
+                F::ExtElem::from_subelems(
+                    (0..F::ExtElem::EXT_SIZE).map(|j| data[j * FRI_FOLD + i]),
+                )
             })
             .collect();
         // Check the existing goal
@@ -88,12 +95,15 @@ where
             return Err(VerificationError::InvalidProof);
         }
         // Compute the new goal + pos
+        crate::core::hash::poseidon2::meter::account(44, __f1);
+        let __f2 = crate::core::hash::poseidon2::meter::now();
         let root_po2 = log2_ceil(FRI_FOLD * round.domain);
         let inv_wk = F::Elem::ROU_REV[root_po2].pow(group);
 
         interpolate_ntt::<F::Elem, F::ExtElem>(&mut data_ext);
         bit_reverse(&mut data_ext);
         *goal = self.poly_eval(&data_ext, round.mix * inv_wk);
+        crate::core::hash::poseidon2::meter::account(46, __f2);
 
         *pos = group;
         Ok(())
@@ -141,7 +151,14 @@ where
         let gen = <F::Elem as RootsOfUnity>::ROU_FWD[log2_ceil(domain)];
         pmeter::account(27, __m);
         // Do queries
+        // ⭐ LOOP-INVARIANT, AND IT WAS BEING REBUILT ONCE PER QUERY. `final_coeffs` and `degree`
+        // are both fixed before the query loop starts — only `x` changes per query — so this repack
+        // of `degree` ExtElems out of subelements was being performed identically 50 TIMES.
+        // Hoisting it is exact by construction: the same inputs produce the same buffer.
         let mut poly_buf: Vec<F::ExtElem> = Vec::with_capacity(degree);
+        poly_buf.extend((0..degree).map(|i| {
+            F::ExtElem::from_subelems((0..F::ExtElem::EXT_SIZE).map(|j| final_coeffs[j * degree + i]))
+        }));
         // [sbf-meter] per-query CU: slots 6..10 = [q_max, q_min, q_sum, q_count, q_max_perm]
         crate::core::hash::poseidon2::meter::qmark_before_loop();
         for _ in 0..QUERIES {
@@ -157,12 +174,6 @@ where
             // Do final verification
             let x = gen.pow(pos);
 
-            poly_buf.clear();
-            poly_buf.extend((0..degree).map(|i| {
-                F::ExtElem::from_subelems(
-                    (0..F::ExtElem::EXT_SIZE).map(|j| final_coeffs[j * degree + i]),
-                )
-            }));
             let fx = self.poly_eval(poly_buf.as_slice(), F::ExtElem::from_subfield(&x));
             if fx != goal {
                 return Err(VerificationError::InvalidProof);

@@ -246,8 +246,13 @@ impl<'a, F: Field> Verifier<'a, F> {
         tap_mix_pows: &[F::ExtElem],
         check_mix_pows: &[F::ExtElem],
     ) -> F::ExtElem {
+        // [sbf-meter] 48 = the TAP ACCUMULATION (one ExtElem*Elem and one add per tap, 643 taps),
+        // 50 = everything after it (poly_eval per combo, the divisors, the batch inversion).
+        // ~5.8M CU of the query loop sits outside verify_query and this is where it must be.
+        let __t0 = pmeter::now();
         let mut tot = vec![F::ExtElem::ZERO; self.taps.combos_size() + 1];
         let combo_count = self.taps.combos_size();
+        pmeter::put(52, combo_count as u64);
         let x = F::ExtElem::from_subfield(&x);
 
         for (reg, cur) in zip(self.taps.regs(), tap_mix_pows.iter()) {
@@ -256,6 +261,54 @@ impl<'a, F: Field> Verifier<'a, F> {
         for (i, cur) in zip(0..Self::CHECK_SIZE, check_mix_pows.iter()) {
             tot[combo_count] += *cur * check_row[i];
         }
+        // ⭐⭐ MONTGOMERY'S BATCH INVERSION. This loop performed ONE FIELD INVERSION PER COMBO PER
+        // QUERY, and an extension-field inverse is the most expensive operation in the verifier —
+        // it is a full Fermat exponentiation, tens of multiplies each. Batch inversion computes
+        // them all with **ONE** inversion plus ~3N multiplies:
+        //   prefix_i = d_0·d_1·…·d_i ;  t = (prefix_{n-1})⁻¹ ;  walking back,
+        //   d_i⁻¹ = t · prefix_{i-1}  and  t ← t · d_i.
+        // It is EXACT — an identity over any field, not an approximation.
+        let n_div = combo_count + 1;
+        let mut divs = Vec::with_capacity(n_div);
+        for i in 0..combo_count {
+            let mut divisor = F::ExtElem::ONE;
+            for back in self.taps.get_combo(i).slice() {
+                divisor *= x - z * back_one.pow(*back as usize);
+            }
+            divs.push(divisor);
+        }
+        divs.push(x - z.pow(INV_RATE));
+
+        // 🔴 THE SAFETY PROPERTY, AND IT IS THE WHOLE REASON THIS IS NOT A DROP-IN. Batch inversion
+        // multiplies every divisor together, so a SINGLE zero divisor makes the accumulated product
+        // zero and would drive EVERY inverse to zero — whereas the per-term form zeroes only the
+        // degenerate term. That is a real divergence in verifier behaviour on an input a prover
+        // influences (a zero divisor means the DEEP point `z` collided with an evaluation point),
+        // so it must not be papered over.
+        // ⇒ detect it and fall back to the exact original path. The branch is never taken for an
+        // honest proof, and when it IS taken the semantics are identical to before.
+        let mut prefix = Vec::with_capacity(n_div);
+        let mut acc = F::ExtElem::ONE;
+        for d in divs.iter() {
+            acc *= *d;
+            prefix.push(acc);
+        }
+        let mut invs = Vec::with_capacity(n_div);
+        if acc == F::ExtElem::ZERO {
+            for d in divs.iter() {
+                invs.push(d.inv());
+            }
+        } else {
+            let mut t = acc.inv();
+            invs.resize(n_div, F::ExtElem::ZERO);
+            for i in (0..n_div).rev() {
+                invs[i] = if i == 0 { t } else { t * prefix[i - 1] };
+                t *= divs[i];
+            }
+        }
+
+        pmeter::account(48, __t0);
+        let __t1 = pmeter::now();
         let mut ret = F::ExtElem::ZERO;
         for i in 0..combo_count {
             let num = tot[i]
@@ -264,15 +317,11 @@ impl<'a, F: Field> Verifier<'a, F> {
                         [self.taps.combo_begin[i] as usize..self.taps.combo_begin[i + 1] as usize],
                     x,
                 );
-            let mut divisor = F::ExtElem::ONE;
-            for back in self.taps.get_combo(i).slice() {
-                divisor *= x - z * back_one.pow(*back as usize);
-            }
-            ret += num * divisor.inv();
+            ret += num * invs[i];
         }
         let check_num = tot[combo_count] - combo_u[self.taps.tot_combo_backs];
-        let check_div = x - z.pow(INV_RATE);
-        ret += check_num * check_div.inv();
+        ret += check_num * invs[combo_count];
+        pmeter::account(50, __t1);
         ret
     }
 
