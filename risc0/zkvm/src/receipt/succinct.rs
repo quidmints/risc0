@@ -24,7 +24,10 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use derive_more::Debug;
 use risc0_binfmt::{read_sha_halfs, tagged_struct, Digestible};
 use risc0_circuit_recursion::{
-    control_id::{ALLOWED_CONTROL_ROOT, MIN_LIFT_PO2, POSEIDON2_CONTROL_IDS, SHA256_CONTROL_IDS},
+    control_id::{
+        ALLOWED_CONTROL_ROOT, BLAKE2B_CONTROL_IDS, BLAKE3_CONTROL_IDS, MIN_LIFT_PO2,
+        POSEIDON2_CONTROL_IDS, SHA256_CONTROL_IDS,
+    },
     CircuitImpl, CIRCUIT,
 };
 use risc0_core::field::baby_bear::BabyBearElem;
@@ -289,6 +292,10 @@ pub(crate) fn allowed_control_ids(
     let zkr_control_ids = match hash_name.as_ref() {
         "sha-256" => SHA256_CONTROL_IDS,
         "poseidon2" => POSEIDON2_CONTROL_IDS,
+        // The two blake arms were absent, so `allowed_control_root("blake3", ..)` bailed and every
+        // succinct receipt was forced through poseidon2 regardless of the segment's hashfn.
+        "blake2b" => BLAKE2B_CONTROL_IDS,
+        "blake3" => BLAKE3_CONTROL_IDS,
         _ => bail!(
             "unrecognized hash name for zkr control ids: {}",
             hash_name.as_ref()
@@ -342,8 +349,20 @@ impl SuccinctReceiptVerifierParameters {
     /// inclusive.
     #[stability::unstable]
     pub fn from_max_po2(po2_max: usize) -> Self {
+        Self::from_max_po2_with_hash("poseidon2", po2_max)
+    }
+
+    /// Same as [Self::from_max_po2], but over the control IDs of the named hash function rather
+    /// than always poseidon2. A receipt sealed under `blake3` carries blake3 control IDs, so its
+    /// control root is a different Merkle root over a different leaf set; verifying it against the
+    /// poseidon2 root fails at the control-inclusion check, not at the seal.
+    // NOT `#[stability::unstable]`, unlike its poseidon2-only sibling: that attribute demotes the
+    // item to `pub(crate)` unless the `unstable` feature is on, and this is the only public way to
+    // ask the crate for a non-poseidon2 control root. Gating it would leave the blake3 path
+    // reachable in theory and unreachable in practice.
+    pub fn from_max_po2_with_hash(hash_name: impl AsRef<str> + 'static, po2_max: usize) -> Self {
         Self {
-            control_root: allowed_control_root("poseidon2", po2_max).unwrap(),
+            control_root: allowed_control_root(hash_name.as_ref().to_string(), po2_max).unwrap(),
             inner_control_root: None,
             proof_system_info: PROOF_SYSTEM_INFO,
             circuit_info: CircuitImpl::CIRCUIT_INFO,
@@ -391,6 +410,9 @@ impl Default for SuccinctReceiptVerifierParameters {
 #[cfg(test)]
 mod tests {
     use super::{allowed_control_root, SuccinctReceiptVerifierParameters, ALLOWED_CONTROL_ROOT};
+    use risc0_circuit_recursion::control_id::{
+        BLAKE2B_ALLOWED_CONTROL_ROOT, BLAKE3_ALLOWED_CONTROL_ROOT,
+    };
     use crate::{receipt::DEFAULT_MAX_PO2, sha::Digestible};
     use risc0_zkp::core::digest::digest;
 
@@ -412,6 +434,44 @@ mod tests {
             allowed_control_root("poseidon2", DEFAULT_MAX_PO2).unwrap(),
             ALLOWED_CONTROL_ROOT
         )
+    }
+
+    // The blake counterparts of `allowed_control_root_fn_matches_bootstrap`. These are the whole
+    // point of the generated tables: a blake3-sealed receipt's control root must be derivable at
+    // runtime from BLAKE3_CONTROL_IDS and equal the committed constant. If the table were wrong,
+    // or the "blake3" arm fell through to poseidon2, this is where it shows.
+    #[test]
+    fn blake3_allowed_control_root_fn_matches_bootstrap() {
+        assert_eq!(
+            allowed_control_root("blake3", DEFAULT_MAX_PO2).unwrap(),
+            BLAKE3_ALLOWED_CONTROL_ROOT
+        )
+    }
+
+    #[test]
+    fn blake2b_allowed_control_root_fn_matches_bootstrap() {
+        assert_eq!(
+            allowed_control_root("blake2b", DEFAULT_MAX_PO2).unwrap(),
+            BLAKE2B_ALLOWED_CONTROL_ROOT
+        )
+    }
+
+    // Each suite must produce a DIFFERENT root. Asserting each against its own constant would
+    // still pass if two constants were accidentally the same value, which is exactly the shape a
+    // copy-paste bug takes here.
+    #[test]
+    fn allowed_control_roots_are_distinct_per_suite() {
+        let roots = [
+            allowed_control_root("poseidon2", DEFAULT_MAX_PO2).unwrap(),
+            allowed_control_root("sha-256", DEFAULT_MAX_PO2).unwrap(),
+            allowed_control_root("blake2b", DEFAULT_MAX_PO2).unwrap(),
+            allowed_control_root("blake3", DEFAULT_MAX_PO2).unwrap(),
+        ];
+        for (i, a) in roots.iter().enumerate() {
+            for b in roots.iter().skip(i + 1) {
+                assert_ne!(a, b, "two hash suites produced the same control root");
+            }
+        }
     }
 
     #[test]

@@ -548,19 +548,32 @@ pub struct Prover {
 /// Utility macro to compress repeated checks that a receipt uses the poseidon2 hash.
 macro_rules! ensure_poseidon2 {
     ($receipt:expr) => {
-        // [blake3] WAS `== "poseidon2"`. The name was doing two jobs: gating what the
-        // recursion PROGRAM can verify, and gating what the HOST will hand it. Only the
-        // first is a real constraint, and it is enforced by the circuit itself — so this
-        // now admits blake3 and lets the CIRCUIT be the judge.
+        // ⚠️ RESTORED TO POSEIDON2-ONLY, and this time the reason is measured rather than argued.
+        // Commit cda14905 widened this to `"poseidon2" | "blake3" | "blake2b"` on the theory that
+        // the name was over-gating and "the circuit would be the judge". The circuit WAS the
+        // judge: a blake3-sealed segment lifts to
+        //     Equality check failed: Expecting [0x6dc7dd1b, ..] == [0x0, 0x0, 0x0, 0x0]
+        // from the EQ micro-op inside the lift ZKR. Two independent reasons, both structural:
         //
-        // 🔑 WHY IT MATTERS: `new_lift_inner` derives `inner_hash_suite` from the SEGMENT's
-        // hashfn and uses it to hash the control-ID Merkle root. With a poseidon2 segment
-        // that hashing asserts `is_reduced()` on every word, which a blake digest is not —
-        // the panic I diagnosed as a structural wall. With a BLAKE3 segment the inner suite
-        // IS blake3, which hashes arbitrary bytes, and the assertion never runs.
+        // 1. ENCODING. `new_lift_inner` hashes the control-ID tree with the SEGMENT's suite and
+        //    feeds the root via `add_input_digest(.., DigestKind::Poseidon2)`, which passes raw
+        //    32-bit words. That is only valid for a digest of BabyBear field elements. 4 of the 8
+        //    words of the blake3 root baf1b07e.. are >= P (0x78000001), so the value the circuit
+        //    reads is not the root we computed, and the ZKR's equality check fails. SHA-256 roots
+        //    have the same problem, which is why `DigestKind::Sha256` exists and splits into
+        //    16-bit halves — but the lift ZKR's input shape is fixed at 8 words.
+        //
+        // 2. NO GADGET. The recursion circuit's only hash primitives are `poseidon2_{load,full,
+        //    partial,store}` and `sha_{init,load,mix,fini}` (see circuit/recursion preflight).
+        //    There is no blake of any kind, so no ZKR can recompute a blake3 seal's Merkle paths
+        //    whatever the host hands it.
+        //
+        // ⇒ SHA256_CONTROL_IDS is the control IDs of the ZKRs under an OUTER sha-256 seal; it is
+        //   not evidence that a sha-256 SEGMENT can be lifted. The inner hash is poseidon2, full
+        //   stop, unless the recursion programs themselves are rewritten.
         ensure!(
-            matches!($receipt.hashfn.as_str(), "poseidon2" | "blake3" | "blake2b"),
-            "recursion programs support poseidon2, blake3 or blake2b; received {}",
+            $receipt.hashfn == "poseidon2",
+            "recursion programs are only supported with Poseidon2 hashes; received {}",
             $receipt.hashfn
         );
     };
