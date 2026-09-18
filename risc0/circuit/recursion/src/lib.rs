@@ -32,7 +32,7 @@ extern crate alloc;
 pub mod control_id;
 mod info;
 pub mod layout;
-mod poly_ext;
+pub mod poly_ext;   // [chunking] DEF must be reachable to measure resumable evaluation
 #[cfg(feature = "prove")]
 pub mod prove;
 mod taps;
