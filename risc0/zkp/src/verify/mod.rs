@@ -270,10 +270,31 @@ impl<'a, F: Field> Verifier<'a, F> {
         // It is EXACT — an identity over any field, not an approximation.
         let n_div = combo_count + 1;
         let mut divs = Vec::with_capacity(n_div);
+        // ⭐ `z * back_one.pow(back)` DOES NOT DEPEND ON THE QUERY. `back_one` and `z` are captured
+        // from outside `fri_verify(|idx| ..)`; only `x = gen.pow(idx)` varies. So this term was
+        // recomputed identically on every query — an `Elem::pow` plus an ExtElem×Elem multiply per
+        // combo-back, per query. Cached here per call instead.
+        // ⚖️ SMALL AND HONEST: `tot_combo_backs = 14` for rv32im, so this is ~83K CU, not a
+        // headline. Taken because it is exact and free, not because it is large.
+        // ⚠️ KEYED BY THE `back` VALUE, NOT BY POSITION. Different combos hold different backs at
+        // the same index, so a position-keyed cache silently returns another combo's term and
+        // computes a wrong divisor — a verifier that accepts the wrong thing, not one that fails.
+        // A plain loop, not a flat_map chain: `get_combo(i)` returns a temporary and `.slice()`
+        // borrows from it, so the iterator would outlive what it points at (E0515).
+        let mut max_back = 0usize;
+        for i in 0..combo_count {
+            for b in self.taps.get_combo(i).slice() {
+                max_back = max_back.max(*b as usize);
+            }
+        }
+        let mut zb: Vec<F::ExtElem> = Vec::with_capacity(max_back + 1);
+        for b in 0..=max_back {
+            zb.push(z * back_one.pow(b));
+        }
         for i in 0..combo_count {
             let mut divisor = F::ExtElem::ONE;
             for back in self.taps.get_combo(i).slice() {
-                divisor *= x - z * back_one.pow(*back as usize);
+                divisor *= x - zb[*back as usize];
             }
             divs.push(divisor);
         }

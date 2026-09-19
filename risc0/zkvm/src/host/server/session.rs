@@ -20,7 +20,9 @@ use std::{fs, path::PathBuf};
 use anyhow::{ensure, Context, Result};
 use enum_map::EnumMap;
 use risc0_binfmt::{PovwJobId, SystemState};
-use risc0_circuit_keccak::{compute_keccak_digest, KECCAK_CONTROL_ROOT};
+#[cfg(feature = "keccak-prove")]
+use risc0_circuit_keccak::compute_keccak_digest;
+use risc0_circuit_keccak::KECCAK_CONTROL_ROOT;
 use risc0_circuit_rv32im::{execute::EcallMetric, TerminateState};
 use serde::{Deserialize, Serialize};
 
@@ -222,6 +224,23 @@ impl Session {
     }
 
     fn keccak_root_assumption(&self) -> Result<Option<Assumption>> {
+        // 🔴 REFUSE, NEVER RETURN `None` QUIETLY. Without `keccak-prove` the digest helper is not
+        // compiled in (it needs alloc and the keccak permutation, which arrive with keccak's own
+        // `prove`). If a session has pending keccaks and we returned None, the receipt would be
+        // built WITHOUT its keccak assumption — verifiable, and unsound. Empty is fine; non-empty
+        // is an error.
+        #[cfg(not(feature = "keccak-prove"))]
+        {
+            ensure!(
+                self.pending_keccaks.is_empty(),
+                "session has {} pending keccak request(s) but risc0-zkvm was built without the \
+                 keccak-prove feature; rebuild with it enabled",
+                self.pending_keccaks.len()
+            );
+            return Ok(None);
+        }
+        #[cfg(feature = "keccak-prove")]
+        {
         let mut keccak_receipts = MerkleMountainAccumulator::<GuestPeak>::new();
         for proof_request in self.pending_keccaks.iter() {
             let claim = compute_keccak_digest(bytemuck::cast_slice(proof_request.input.as_slice()));
@@ -238,6 +257,7 @@ impl Session {
             return Ok(Some(root_assumption));
         }
         Ok(None)
+        }
     }
 
     fn unresolved_assumptions(&self) -> Result<Assumptions> {

@@ -375,8 +375,22 @@ impl ProverServer for ProverImpl {
         &self,
         request: &crate::ProveKeccakRequest,
     ) -> Result<SuccinctReceipt<Unknown>> {
-        // TODO: figure out how to verify this
-        prove_keccak(request)
+        // The trait requires this method, so the BODY is gated rather than the method. Refusing
+        // is the whole point: a caller that asked for a keccak proof must hear "no", never get a
+        // receipt that quietly lacks the assumption.
+        #[cfg(not(feature = "keccak-prove"))]
+        {
+            let _ = request;
+            anyhow::bail!(
+                "risc0-zkvm was built without the keccak-prove feature; keccak proofs are \
+                 unavailable. Rebuild with it enabled."
+            )
+        }
+        #[cfg(feature = "keccak-prove")]
+        {
+            // TODO: figure out how to verify this
+            prove_keccak(request)
+        }
     }
 
     fn union(
