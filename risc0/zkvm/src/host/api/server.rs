@@ -25,6 +25,8 @@ use risc0_binfmt::PovwJobId;
 use risc0_zkp::core::digest::Digest;
 
 use super::{malformed_err, path_to_string, pb, ConnectionWrapper, Connector, TcpConnector};
+#[cfg(feature = "keccak-prove")]
+use crate::host::server::prove::keccak::prove_keccak;
 use crate::{
     get_prover_server, get_version,
     host::{
@@ -34,7 +36,7 @@ use crate::{
             slice_io::SliceIo,
         },
         server::{
-            exec::executor::ExecutorImpl, prove::keccak::prove_keccak, session::NullSegmentRef,
+            exec::executor::ExecutorImpl, session::NullSegmentRef,
         },
     },
     recursion::identity_p254,
@@ -488,6 +490,19 @@ impl Server {
         mut conn: ConnectionWrapper,
         request: pb::api::ProveKeccakRequest,
     ) -> Result<()> {
+        // 🔴 REFUSE, DO NOT COMPILE THE CALLER OUT. The API contracts to ANSWER, so an
+        // unanswerable request must say so; the error rides the same ProveKeccakReply::Error
+        // channel a proving failure uses. The WHOLE body is gated, not the one call, because
+        // everything after it uses `receipt`.
+        #[cfg(not(feature = "keccak-prove"))]
+        fn inner(_r: pb::api::ProveKeccakRequest) -> Result<pb::api::ProveKeccakReply> {
+            anyhow::bail!(
+                "risc0-zkvm was built without the keccak-prove feature, so keccak proof \
+                 requests cannot be served; rebuild with it enabled"
+            )
+        }
+
+        #[cfg(feature = "keccak-prove")]
         fn inner(request_pb: pb::api::ProveKeccakRequest) -> Result<pb::api::ProveKeccakReply> {
             let request: ProveKeccakRequest = request_pb.clone().try_into()?;
             let receipt = prove_keccak(&request)?;

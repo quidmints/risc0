@@ -16,7 +16,9 @@ use std::collections::HashMap;
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
 
-use super::{keccak::prove_keccak, ProverServer};
+#[cfg(feature = "keccak-prove")]
+use super::keccak::prove_keccak;
+use super::ProverServer;
 use crate::{
     claim::merge::Merge,
     host::{
@@ -121,6 +123,20 @@ impl ProverServer for ProverImpl {
         let mut zkr_receipts = HashMap::new();
         let mut keccak_receipts: MerkleMountainAccumulator<UnionPeak> =
             MerkleMountainAccumulator::new();
+        // 🔴 REFUSED, NEVER SKIPPED. Without this feature the keccak prover is not compiled in
+        // (its C++ kernels are the largest units in the tree and our guest never calls the
+        // accelerator). But a guest that DID request keccak proofs and got none would produce a
+        // receipt MISSING ITS ASSUMPTIONS — which still verifies, and is unsound. So an empty
+        // request list is fine and a non-empty one is an error. Silence is the outcome that must
+        // not happen.
+        #[cfg(not(feature = "keccak-prove"))]
+        ensure!(
+            session.pending_keccaks.is_empty(),
+            "guest requested {} keccak proof(s) but risc0-zkvm was built without the \
+             keccak-prove feature; rebuild with it enabled",
+            session.pending_keccaks.len()
+        );
+        #[cfg(feature = "keccak-prove")]
         for proof_request in session.pending_keccaks.iter() {
             let receipt = prove_keccak(proof_request)?;
             tracing::debug!("adding keccak assumption: {}", receipt.claim.digest());

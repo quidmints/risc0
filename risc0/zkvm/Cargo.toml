@@ -178,6 +178,17 @@ getrandom = ["risc0-zkvm-platform/getrandom"]
 # memory. This will use a slower linked-list heap allocator to reclaim memory.
 heap-embedded-alloc = ["risc0-zkvm-platform/heap-embedded-alloc"]
 metal = ["prove"]
+# ⭐ KECCAK PROVING IS OPT-IN, AND THIS IS A BUILD-TIME DECISION WORTH HOURS.
+# `risc0-circuit-keccak/prove` pulls `risc0-circuit-keccak-sys`, whose C++ kernels are the LARGEST
+# translation units in the tree — rust_poly_fp_*.cpp at 7.6 MB against rv32im's 2.8-4.0 MB. Measured:
+# three of them held a cold build for over five hours, and our guest never invokes the keccak
+# accelerator at all. Splitting it out of `prove` means the keccak Rust crate still builds (so
+# compute_keccak_digest, KeccakState and KECCAK_CONTROL_ROOT stay available) while its PROVER, and
+# therefore all of that C++, does not.
+# ⚠️ Turn this on if a guest ever calls the keccak accelerator — `prove_keccak` is refused loudly
+# without it, never skipped, because a skipped keccak assumption is an UNSOUND receipt.
+keccak-prove = ["risc0-circuit-keccak/prove"]
+
 prove = [
   "client",
   "dep:addr2line",
@@ -198,7 +209,6 @@ prove = [
   "dep:rustc-demangle",
   "dep:tempfile",
   "dep:typetag",
-  "risc0-circuit-keccak/prove",
   "risc0-circuit-recursion/prove",
   "risc0-circuit-rv32im/prove",
   "risc0-core/perf",

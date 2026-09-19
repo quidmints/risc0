@@ -15,6 +15,7 @@
 //! Run the zkVM guest and prove its results.
 
 pub(crate) mod dev_mode;
+#[cfg(feature = "keccak-prove")]
 pub(crate) mod keccak;
 mod prover_impl;
 #[cfg(test)]
