@@ -43,6 +43,27 @@ pub const ZK_CYCLES: usize = 1024; // TODO: Ideally we'd compute ZK_CYCLES progr
 pub const MIN_PO2: usize = core::log2_ceil(1 + ZK_CYCLES);
 
 /// Inverse of Reed-Solomon Expansion Rate
+///
+/// ⛔⛔ DO NOT TUNE THIS AS AN FRI PARAMETER. IT IS NOT ONE — IT IS TWO THINGS.
+///
+/// The obvious trade looks free: a query is worth log2(1/rate) bits, so rate 1/8 with 34 queries
+/// gives 102 raw bits against 50 queries at 1/4 giving 100 — MORE security and ~2.75M CU less
+/// verifier work. The arithmetic is right. The premise is not.
+///
+/// 🔑 `CHECK_SIZE = INV_RATE * EXT_SIZE` in BOTH `verify/mod.rs` and `hal/mod.rs`. So INV_RATE also
+/// sets how many columns the QUOTIENT polynomial is split into — and that split is fixed by the
+/// circuit's MAX CONSTRAINT DEGREE, not by anything about FRI. rv32im is degree 5, so the quotient
+/// is 4 x cycles and wants exactly 4 columns. Asking for 8 demands 32 check columns from a
+/// polynomial holding 16 columns' worth of degree.
+///
+/// ⚠️ IT DOES NOT FAIL LOUDLY. Prover and verifier simply disagree, and the prover's own native
+/// check rejects the proof it just produced: "verify segment: verification indicates proof is
+/// invalid". Tried, measured, reverted — and the commit that made the change was removed from this
+/// branch rather than left to mislead, because its subject line asserted the opposite.
+///
+/// ⇒ To take the trade the two uses must be DECOUPLED: a separate constant for the FRI blowup,
+/// leaving CHECK_SIZE tied to the constraint degree. That is a soundness-structural change, not a
+/// constant swap.
 pub const INV_RATE: usize = 4;
 
 const FRI_FOLD_PO2: usize = 4;
